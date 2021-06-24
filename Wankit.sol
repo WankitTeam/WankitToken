@@ -4,7 +4,7 @@
    
    Come with us to the moon!!
    
-   Using their significant experience in both cryptocurrency and masturbation, the Wankit team have created a deflationary token ($WNKT) which will be used to access exclusive adult content on the WANKITtv platform.
+   Using our significant experience in both cryptocurrency and masturbation, the Wankit team have created a deflationary token ($WNKT) which will be used to access exclusive adult content on the WANKITtv platform.
    WANKITtv gives unique adult experiences through the safety and anonymity of blockchain technology, rewards $WNKT holders through passive reflection and contributes to making the adult industry a safer place for all.
 
    The token features:
