@@ -1,20 +1,23 @@
 
 /**
-   Wankit
-   
-   Come with us to the moon!!
-
-   The token features:
-    - Sliding scale, anti-whale fee structure - the bigger your wallet, the bigger the fee per transaction (don't worry, having a big, swinging, uh, wallet has other perks)
-    - 34% of the fee is auto-added to the liquidity pool to create a continually rising price floor
-    - 33% of the fee is auto-distributed to all holders
-    - 11% of the fee goes to the marketing wallet - keeping those exchange listings and influencer partnerships coming
-    - 11% of the fee goes to the platform development wallet - gives holders trust that the team will continue to invest in the product (and means the devs get pizza breaks in the LONG, HARD hours they spend looking at the sexiest adult models Wankit can buy)
-    - 11% of the fee goes to the charity wallet - helping to support workers in the sex trade around the world
-    - 45% burned at launch, with a strong burn and reflection the circulating supply will keep decreasing, putting more positive pressure on the token price
-    
-    Join our TG: https://t.me/WankitCommunity
-    Visit our website: www.wankit.tv
+ *  Wankit
+ *  
+ *  Come with us to the moon!!
+ *  
+ *  Using their significant experience in both wanking and cryptocurrency, the Wankit team have created a deflationary token ($WNKT) which will be used to access exclusive adult content on the WANKITtv platform.
+ *  WANKITtv gives unique adult experiences through the safety and anonymity of blockchain technology, rewards $WNKT holders through passive reflection and contributes to making the adult industry a safer place for all.
+ *
+ *  The token features:
+ *   - Sliding scale, anti-whale fee structure - the bigger your wallet, the bigger the fee per transaction (don't worry, having a big, swinging, uh, wallet has other perks)
+ *   - 34% of the fee is auto-added to the liquidity pool to create a continually rising price floor
+ *   - 33% of the fee is auto-distributed to all holders
+ *   - 11% of the fee goes to the marketing wallet - keeping those exchange listings and influencer partnerships coming
+ *   - 11% of the fee goes to the platform development wallet - gives holders trust that the team will continue to invest in the product (and means the devs get pizza breaks in the LONG, HARD hours they spend looking at the sexiest adult models WNKT can buy)
+ *   - 11% of the fee goes to the charity wallet - helping to support workers in the sex trade around the world
+ *   - 45% burned at launch - with a large burn and reflection the circulating supply will keep decreasing, putting more positive pressure on the token price
+ *   
+ *   Join our TG: https://t.me/WankitCummunity
+ *   Visit our website: www.wankit.tv
  */
 
 pragma solidity ^0.8.1;
@@ -719,9 +722,9 @@ contract Wankit is Context, IBEP20, Ownable {
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
-    address public _marketingWallet = CHANGEME;
-    address public _platformWallet = CHANGEME;
-    address public _charityWallet = CHANGEME;
+    address public _marketingWallet = 0x5de5Fc9f24073F939CFBBeA1b2ffA4832753C6C1;
+    address public _platformWallet = 0xf54054378e5905d1e2eb4ab0F633eB36EbFf09d2;
+    address public _charityWallet = 0xF8a2D291ce72Bd83D010151cA1c14580EF05181F;
     
     uint256 private _feeSecondOrderTerm = 1;
     uint256 private _feeFirstOrderTerm = 8 * 10**14;
@@ -782,11 +785,9 @@ contract Wankit is Context, IBEP20, Ownable {
         _rOwned[_msgSender()] = _rTotal;
         _feeSetter = _msgSender();
         
-        // 0x10ED43C718714eb63d5aA57B78B54704E256024E is the PCSv2 router address
-        // 0xD99D1c33F9fC3444f8101754aBC46c52416550D1 is the PCS testnet router 
-        // 0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3 - https://pancake.kiemtienonline360.com/
-        IPancakeRouter02 pancakeswapV2Router = IPancakeRouter02 (0x10ED43C718714eb63d5aA57B78B54704E256024E);
-        // Create a pancakeswap pair for this new token
+         //This is the testnet address - 0x10ED43C718714eb63d5aA57B78B54704E256024E is the PCSv2 Router address - CHANGEME - this is PCS testnet - 0xD99D1c33F9fC3444f8101754aBC46c52416550D1 below is kiemtie's contract
+        IPancakeRouter02 pancakeswapV2Router = IPancakeRouter02(0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3);
+         // Create a pancakeswap pair for this new token
         _pancakeswapV2Pair = IPancakeFactory(pancakeswapV2Router.factory()).createPair(address(this), pancakeswapV2Router.WETH());
 
         // set the rest of the contract variables
