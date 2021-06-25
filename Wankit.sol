@@ -3,20 +3,17 @@
    Wankit
    
    Come with us to the moon!!
-   
-   Using our significant experience in both cryptocurrency and masturbation, the Wankit team have created a deflationary token ($WNKT) which will be used to access exclusive adult content on the WANKITtv platform.
-   WANKITtv gives unique adult experiences through the safety and anonymity of blockchain technology, rewards $WNKT holders through passive reflection and contributes to making the adult industry a safer place for all.
 
    The token features:
     - Sliding scale, anti-whale fee structure - the bigger your wallet, the bigger the fee per transaction (don't worry, having a big, swinging, uh, wallet has other perks)
     - 34% of the fee is auto-added to the liquidity pool to create a continually rising price floor
     - 33% of the fee is auto-distributed to all holders
     - 11% of the fee goes to the marketing wallet - keeping those exchange listings and influencer partnerships coming
-    - 11% of the fee goes to the platform development wallet - gives holders trust that the team will continue to invest in the product (and means the devs get pizza breaks in the LONG, HARD hours they spend looking at the sexiest adult models WNKT can buy)
+    - 11% of the fee goes to the platform development wallet - gives holders trust that the team will continue to invest in the product (and means the devs get pizza breaks in the LONG, HARD hours they spend looking at the sexiest adult models Wankit can buy)
     - 11% of the fee goes to the charity wallet - helping to support workers in the sex trade around the world
-    - 45% burned at launch - with a large burn and reflection the circulating supply will keep decreasing, putting more positive pressure on the token price
+    - 45% burned at launch, with a strong burn and reflection the circulating supply will keep decreasing, putting more positive pressure on the token price
     
-    Join our TG: https://t.me/WankitCummunity
+    Join our TG: https://t.me/WankitCommunity
     Visit our website: www.wankit.tv
  */
 
@@ -722,9 +719,9 @@ contract Wankit is Context, IBEP20, Ownable {
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
-    address public _marketingWallet = 0x5de5Fc9f24073F939CFBBeA1b2ffA4832753C6C1;
-    address public _platformWallet = 0xf54054378e5905d1e2eb4ab0F633eB36EbFf09d2;
-    address public _charityWallet = 0xF8a2D291ce72Bd83D010151cA1c14580EF05181F;
+    address public _marketingWallet = CHANGEME;
+    address public _platformWallet = CHANGEME;
+    address public _charityWallet = CHANGEME;
     
     uint256 private _feeSecondOrderTerm = 1;
     uint256 private _feeFirstOrderTerm = 8 * 10**14;
@@ -750,10 +747,6 @@ contract Wankit is Context, IBEP20, Ownable {
     uint256 public _maxTxAmount = 1000000000 * 10**_decimals; //initialised to be disabled (set to total supply)
     uint256 private constant _numTokensSellToAddToLiquidity = 300000 * 10**_decimals; //minimum amount needed in contract before it's transferred to LP
     
-    //CHANGEME remove these events
-    event FeesFromBalance (uint256 senderBalance, uint256 unscaledFeeLimit, uint256 scaledTxTotalFee);
-    event TxFeesCalculated (uint256 liquidityFee, uint256 reflectionFee, uint256 marketingFee, uint256 charityFee, uint256 platformFee);
-    
     event MinTokensBeforeSwapUpdated (uint256 minTokensBeforeSwap);
     event SwapAndLiquifyEnabledUpdated (bool enabled);
     event SwapAndLiquify (uint256 tokensSwapped, uint256 bnbReceived, uint256 tokensIntoLiquidity);
@@ -761,7 +754,7 @@ contract Wankit is Context, IBEP20, Ownable {
     event ExcludedFromReward (address indexed account);
     event IncludedInFee (address indexed account);
     event ExcludedFromFee (address indexed account);
-    event RouterAndLPPairAddressChanged (address oldRouterFactory, address oldPair, address newRouterFactory, address newPair);
+    event RouterAndLPPairAddressChanged (address indexed newRouterFactory, address indexed newPair);
     event MinMaxBalancesForFeeFormulaChanged (uint256 oldMinFeeCeilingBalance, uint256 oldMaxFeeFloorBalance, uint256 newMinFeeCeilingBalance, uint256 newMaxFeeFloorBalance);
     event FeeFormulaUpdated (uint256 secondOrderTerm, uint256 firstOrderTerm, uint256 zerothOrderTerm, uint256 integerScalingFactor);
     event FeePercentagesUpdated (uint256 reflectionFeePercentage, uint256 liquidityFeePercentage, uint256 marketingFeePercentage, uint256 charityFeePercentage, uint256 platformFeePercentage);
@@ -770,7 +763,7 @@ contract Wankit is Context, IBEP20, Ownable {
     event FeeTransfer (uint256 feeAmount, address indexed recipient);
     event FeeSetterChanged (address indexed newFeeSetter);
     event AccidentallySentTokenWithdrawn (address indexed token, address indexed account, uint256 amount);
-    event AccidentallySentBNBWithdrawn (address account, uint256 amount);
+    event AccidentallySentBNBWithdrawn (address indexed account, uint256 amount);
     
     modifier lockTheSwap {
         _inSwapAndLiquify = true;
@@ -789,9 +782,11 @@ contract Wankit is Context, IBEP20, Ownable {
         _rOwned[_msgSender()] = _rTotal;
         _feeSetter = _msgSender();
         
-         //This is the testnet address - 0x10ED43C718714eb63d5aA57B78B54704E256024E is the PCSv2 Router address - CHANGEME - this is PCS testnet - 0xD99D1c33F9fC3444f8101754aBC46c52416550D1 below is kiemtie's contract
-        IPancakeRouter02 pancakeswapV2Router = IPancakeRouter02(0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3);
-         // Create a pancakeswap pair for this new token
+        // 0x10ED43C718714eb63d5aA57B78B54704E256024E is the PCSv2 router address
+        // 0xD99D1c33F9fC3444f8101754aBC46c52416550D1 is the PCS testnet router 
+        // 0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3 - https://pancake.kiemtienonline360.com/
+        IPancakeRouter02 pancakeswapV2Router = IPancakeRouter02 (0x10ED43C718714eb63d5aA57B78B54704E256024E);
+        // Create a pancakeswap pair for this new token
         _pancakeswapV2Pair = IPancakeFactory(pancakeswapV2Router.factory()).createPair(address(this), pancakeswapV2Router.WETH());
 
         // set the rest of the contract variables
@@ -889,9 +884,11 @@ contract Wankit is Context, IBEP20, Ownable {
         require (newRouter != address(0), "Router cannot be set to the zero address");
         IPancakeRouter02 newPancakeswapV2Router = IPancakeRouter02(newRouter);
         address newPancakeswapV2Pair = IPancakeFactory(newPancakeswapV2Router.factory()).createPair(address(this), newPancakeswapV2Router.WETH());
-        emit RouterAndLPPairAddressChanged (_pancakeswapV2Router.factory(), _pancakeswapV2Pair, newPancakeswapV2Router.factory(), newPancakeswapV2Pair);
         _pancakeswapV2Pair = newPancakeswapV2Pair;
         _pancakeswapV2Router = newPancakeswapV2Router;
+        _isExcluded[_pancakeswapV2Pair] = true; //should stop skimming being successful
+        _excluded.push(_pancakeswapV2Pair);
+        emit RouterAndLPPairAddressChanged (_pancakeswapV2Router.factory(), _pancakeswapV2Pair);
     }
     
     // Allows modifying the minimum and maximum wallet balances where the fee formula starts to take effect.
@@ -1067,7 +1064,6 @@ contract Wankit is Context, IBEP20, Ownable {
             
             uint256 unscaledFeeLimit = _feeSecondOrderTerm.mul(senderBalance).mul(senderBalance) + _feeFirstOrderTerm.mul(senderBalance) + _feeZerothOrderTerm;
             uint256 scaledTxTotalFee = unscaledFeeLimit.mul(tAmount).div(senderBalance).div(_feeIntegerScalingFactor);
-            emit FeesFromBalance (senderBalance, unscaledFeeLimit, scaledTxTotalFee);
             uint256 tTransferAmount = tAmount.sub(scaledTxTotalFee);
             uint256 tReflectionFee = _calculateAndTakeFees (scaledTxTotalFee);
             uint256 tOtherFees = scaledTxTotalFee.sub(tReflectionFee);
@@ -1083,7 +1079,6 @@ contract Wankit is Context, IBEP20, Ownable {
         uint256 tMarketingFee = totalTxFee.mul(_marketingFeePercentage).div(100);
         uint256 tCharityFee = totalTxFee.mul(_charityFeePercentage).div(100);
         uint256 tPlatformFee = totalTxFee.sub(tReflectionFee).sub(tLiquidityFee).sub(tMarketingFee).sub(tCharityFee);
-        emit TxFeesCalculated (tLiquidityFee, tReflectionFee, tMarketingFee, tCharityFee, tPlatformFee);
         _takeFee (tLiquidityFee, address(this));
         _takeFee (tMarketingFee, _marketingWallet);
         _takeFee (tCharityFee, _charityWallet);
