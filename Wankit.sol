@@ -785,8 +785,10 @@ contract Wankit is Context, IBEP20, Ownable {
         _rOwned[_msgSender()] = _rTotal;
         _feeSetter = _msgSender();
         
-         //This is the testnet address - 0x10ED43C718714eb63d5aA57B78B54704E256024E is the PCSv2 Router address - CHANGEME - this is PCS testnet - 0xD99D1c33F9fC3444f8101754aBC46c52416550D1 below is kiemtie's contract
-        IPancakeRouter02 pancakeswapV2Router = IPancakeRouter02(0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3);
+        // 0x10ED43C718714eb63d5aA57B78B54704E256024E is the PCSv2 Router address 
+        // 0xD99D1c33F9fC3444f8101754aBC46c52416550D1 is the PCS testnet
+        // 0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3 is the address of https://pancake.kiemtienonline360.com/
+        IPancakeRouter02 pancakeswapV2Router = IPancakeRouter02 (0x10ED43C718714eb63d5aA57B78B54704E256024E);
          // Create a pancakeswap pair for this new token
         _pancakeswapV2Pair = IPancakeFactory(pancakeswapV2Router.factory()).createPair(address(this), pancakeswapV2Router.WETH());
 
