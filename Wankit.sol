@@ -722,9 +722,9 @@ contract Wankit is Context, IBEP20, Ownable {
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
-    address public _marketingWallet = 0x5de5Fc9f24073F939CFBBeA1b2ffA4832753C6C1;
-    address public _platformWallet = 0xf54054378e5905d1e2eb4ab0F633eB36EbFf09d2;
-    address public _charityWallet = 0xF8a2D291ce72Bd83D010151cA1c14580EF05181F;
+    address public _marketingWallet;
+    address public _platformWallet;
+    address public _charityWallet;
     
     uint256 private _feeSecondOrderTerm = 1;
     uint256 private _feeFirstOrderTerm = 8 * 10**14;
@@ -781,9 +781,13 @@ contract Wankit is Context, IBEP20, Ownable {
         _lock = false;
     }
     
-    constructor () {
+    constructor (address marketingWallet, address platformWallet, address charityWallet) {
         _rOwned[_msgSender()] = _rTotal;
         _feeSetter = _msgSender();
+        
+        _marketingWallet = marketingWallet;
+        _platformWallet = platformWallet;
+        _charityWallet = charityWallet;
         
         // 0x10ED43C718714eb63d5aA57B78B54704E256024E is the PCSv2 Router address 
         // 0xD99D1c33F9fC3444f8101754aBC46c52416550D1 is the PCS testnet
