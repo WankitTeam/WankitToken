@@ -752,7 +752,6 @@ contract Wankit is Context, IBEP20, Ownable {
     
     event MinTokensBeforeSwapUpdated (uint256 minTokensBeforeSwap);
     event SwapAndLiquifyEnabledUpdated (bool enabled);
-    event SwapAndLiquify (uint256 tokensSwapped, uint256 bnbReceived, uint256 tokensIntoLiquidity);
     event IncludedInReward (address indexed account);
     event ExcludedFromReward (address indexed account);
     event IncludedInFee (address indexed account);
@@ -844,7 +843,7 @@ contract Wankit is Context, IBEP20, Ownable {
         require(!_isExcluded[account], "Account is already excluded");
         
         if(_rOwned[account] > 0) {
-            _tOwned[account] = tokenFromReflection(_rOwned[account]);
+            _tOwned[account] = _tokenFromReflection(_rOwned[account]);
         }
         
         _isExcluded[account] = true;
@@ -1020,7 +1019,7 @@ contract Wankit is Context, IBEP20, Ownable {
         if (_isExcluded[account]) 
             return _tOwned[account];
         
-        return tokenFromReflection(_rOwned[account]);
+        return _tokenFromReflection(_rOwned[account]);
     }
     
     function allowance (address owner, address spender) public view override returns (uint256) {
@@ -1072,29 +1071,16 @@ contract Wankit is Context, IBEP20, Ownable {
             uint256 unscaledFeeLimit = _feeSecondOrderTerm.mul(senderBalance).mul(senderBalance) + _feeFirstOrderTerm.mul(senderBalance) + _feeZerothOrderTerm;
             uint256 scaledTxTotalFee = unscaledFeeLimit.mul(tAmount).div(senderBalance).div(_feeIntegerScalingFactor);
             uint256 tTransferAmount = tAmount.sub(scaledTxTotalFee);
-            uint256 tReflectionFee = _calculateAndTakeFees (scaledTxTotalFee);
+            uint256 tReflectionFee = scaledTxTotalFee.mul(_reflectionFeePercentage).div(100);
             uint256 tOtherFees = scaledTxTotalFee.sub(tReflectionFee);
+            _takeTokenFee (tOtherFees, address(this));
             (uint256 rAmount, uint256 rTransferAmount, uint256 rReflectionFee) = _getRValues (tAmount, tReflectionFee, tOtherFees, _getRate());
             return (rAmount, rTransferAmount, rReflectionFee, tTransferAmount, tReflectionFee);
         }
     }
 
-    // Calculate and distribute fees
-    function _calculateAndTakeFees (uint256 totalTxFee) private returns (uint256) {
-        uint256 tReflectionFee = totalTxFee.mul(_reflectionFeePercentage).div(100);
-        uint256 tLiquidityFee = totalTxFee.mul(_liquidityFeePercentage).div(100);
-        uint256 tMarketingFee = totalTxFee.mul(_marketingFeePercentage).div(100);
-        uint256 tCharityFee = totalTxFee.mul(_charityFeePercentage).div(100);
-        uint256 tPlatformFee = totalTxFee.sub(tReflectionFee).sub(tLiquidityFee).sub(tMarketingFee).sub(tCharityFee);
-        _takeFee (tLiquidityFee, address(this));
-        _takeFee (tMarketingFee, _marketingWallet);
-        _takeFee (tCharityFee, _charityWallet);
-        _takeFee (tPlatformFee, _platformWallet);
-        return tReflectionFee;
-    }
-   
     // Transfer fee amounts to wallets
-    function _takeFee (uint256 tFee, address recipient) private {
+    function _takeTokenFee (uint256 tFee, address recipient) private {
         uint256 currentRate =  _getRate();
         uint256 rFee = tFee.mul(currentRate);
         _rOwned[recipient] = _rOwned[recipient].add(rFee);
@@ -1113,7 +1099,7 @@ contract Wankit is Context, IBEP20, Ownable {
         emit Approval(owner, spender, amount);
     }
 
-    // Transfer tokens, swapping and liquifying if the contract balance is large enough (and it is a token sale)
+    // Transfer tokens, taking fees and adding liquidity if the contract balance is large enough (and it is a token sale)
     function _transfer (address from, address to, uint256 amount) private {
         require (from != address(0), "Can't transfer from the zero address");
         require (to != address(0), "Can't transfer to the zero address");
@@ -1127,36 +1113,48 @@ contract Wankit is Context, IBEP20, Ownable {
         if (contractTokenBalance >= _maxTxAmount)
             contractTokenBalance = _maxTxAmount;
         
-        //check the token balance of this contract is over the min number we need to initiate a swap + liquidity lock
-        //check we're not already adding liquidity and don't swap & liquify if sender is the PCS pair (i.e. someone is buying WNKT).
+        // Check the token balance of this contract is over the min number we need to initiate a swap + liquidity lock
+        // Check we're not already adding liquidity and don't take fees if sender is the PCS pair (i.e. someone is buying WNKT).
         if (contractTokenBalance >= _numTokensSellToAddToLiquidity && !_inSwapAndLiquify && from != _pancakeswapV2Pair && _swapAndLiquifyEnabled)
-            swapAndLiquify(_numTokensSellToAddToLiquidity);
+            _takeBNBFees (contractTokenBalance);
         
         bool takeFee = true;
         
-        //if any account belongs to _isExcludedFromFee account then remove the fee
+        // If any account belongs to an _isExcludedFromFee account then remove the fee
         if (_isExcludedFromFee[from] || _isExcludedFromFee[to])
             takeFee = false;
         
         _tokenTransfer (from, to, amount, takeFee);
     }
 
-    // Swap half the tokens for BNB and add tokens + BNB to the LP
-    function swapAndLiquify (uint256 contractTokenBalance) private lockTheSwap {
-        // Split the contract balance into halves
-        uint256 half = contractTokenBalance.div(2);
-        uint256 otherHalf = contractTokenBalance.sub(half);
+    // Swap half the tokens for BNB, add tokens + BNB to the LP and take fee amounts to fee wallets
+    function _takeBNBFees (uint256 contractTokenBalance) private lockTheSwap {
+        uint256 feeDivisor = _liquidityFeePercentage.add(_marketingFeePercentage).add(_platformFeePercentage).add(_charityFeePercentage);
+        uint256 liquidityBalance = contractTokenBalance.mul(_liquidityFeePercentage).div(feeDivisor);
+        uint256 otherBalance = contractTokenBalance.sub(liquidityBalance);
+        
+        // Split the liquidity balance into halves
+        uint256 half = liquidityBalance.div(2);
+        uint256 otherHalf = liquidityBalance.sub(half);
        
-       // Swap half for BNB
-        uint256 bnbReceived = swapTokensForBNB (half); 
+       // Swap half + other fee amounts for BNB
+        uint256 bnbReceived = _swapTokensForBNB (half.add(otherBalance)); 
 
-        // Add liquidity to PCS
-        addLiquidity (otherHalf, bnbReceived);
-        emit SwapAndLiquify (half, bnbReceived, otherHalf);
+        // Add liquidity to PCS - we know this is too much BNB so expect some to be returned
+        uint256 bnbRemainder = _addLiquidity (otherHalf, bnbReceived);
+        
+        // Calculate the amount to distribute to each wallet and transfer it
+        feeDivisor = feeDivisor.sub(_liquidityFeePercentage);
+        uint256 marketingBalance = bnbRemainder.mul(_marketingFeePercentage).div(feeDivisor);
+        uint256 charityBalance = bnbRemainder.mul(_charityFeePercentage).div(feeDivisor);
+        uint256 platformBalance = bnbRemainder.sub(marketingBalance).sub(charityBalance);
+        payable(_marketingWallet).sendValue(marketingBalance);
+        payable(_charityWallet).sendValue(charityBalance);
+        payable(_platformWallet).sendValue(platformBalance);
     }
 
-    // Swap to BNB, and return how much BNB we swapped for
-    function swapTokensForBNB (uint256 tokenAmount) private returns (uint256) {
+    // Swap to BNB and return how much BNB we swapped for
+    function _swapTokensForBNB (uint256 tokenAmount) private returns (uint256) {
         // Get the contract's current BNB balance so we know how much BNB the swap creates, and don't include any BNB that has been manually sent to the contract
         uint256 initialBalance = address(this).balance;
         
@@ -1180,13 +1178,13 @@ contract Wankit is Context, IBEP20, Ownable {
         return address(this).balance.sub(initialBalance);
     }
 
-    // Add token and BNB to LP, ensuring all swapped BNB is used
-    function addLiquidity (uint256 tokenAmount, uint256 bnbAmount) private {
+    // Add token and BNB to LP, returning the amount of any unused BNB
+    function _addLiquidity (uint256 tokenAmount, uint256 bnbAmount) private returns (uint256) {
         // Approve token transfer to cover all possible scenarios
         _approve (address(this), address(_pancakeswapV2Router), tokenAmount);
 
         // Add the liquidity
-        (, uint256 amountBnbFromLiquidityTx, ) = _pancakeswapV2Router.addLiquidityETH {value: bnbAmount} (
+        (, uint256 amountBNBFromLiquidityTx, ) = _pancakeswapV2Router.addLiquidityETH {value: bnbAmount} (
             address(this),
             tokenAmount,
             0, // slippage is unavoidable
@@ -1195,8 +1193,7 @@ contract Wankit is Context, IBEP20, Ownable {
             block.timestamp
         );
         
-        if (amountBnbFromLiquidityTx < bnbAmount)
-            payable(_platformWallet).sendValue(bnbAmount.sub(amountBnbFromLiquidityTx));
+        return (bnbAmount - amountBNBFromLiquidityTx);
     }
 
     // Calculate fees and transfer tokens
@@ -1231,7 +1228,7 @@ contract Wankit is Context, IBEP20, Ownable {
     }
     
     // Return the number of "normal" tokens an account has based on their reflective balance
-    function tokenFromReflection (uint256 rAmount) private view returns (uint256) {
+    function _tokenFromReflection (uint256 rAmount) private view returns (uint256) {
         require(rAmount <= _rTotal, "Amount must be less than total reflections");
         uint256 currentRate =  _getRate();
         return rAmount.div(currentRate);
