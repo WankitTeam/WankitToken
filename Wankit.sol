@@ -1,8 +1,9 @@
 
+
 /**
  *  Wankit
  *  
- *  Come with us to the moon!!
+ *  Cum with us to the moon!!
  *  
  *  Using their significant experience in both wanking and cryptocurrency, the Wankit team have created a deflationary token ($WNKT) which will be used to access exclusive adult content on the WANKITtv platform.
  *  WANKITtv gives unique adult experiences through the safety and anonymity of blockchain technology, rewards $WNKT holders through passive reflection and contributes to making the adult industry a safer place for all.
@@ -14,7 +15,7 @@
  *   - 11% of the fee goes to the marketing wallet - keeping those exchange listings and influencer partnerships coming
  *   - 11% of the fee goes to the platform development wallet - gives holders trust that the team will continue to invest in the product (and means the devs get pizza breaks in the LONG, HARD hours they spend looking at the sexiest adult models WNKT can buy)
  *   - 11% of the fee goes to the charity wallet - helping to support workers in the sex trade around the world
- *   - 45% burned at launch - with a large burn and reflection the circulating supply will keep decreasing, putting more positive pressure on the token price
+ *   - 46% burned at launch - with a large burn and reflection the circulating supply will keep decreasing, putting more positive pressure on the token price
  *   
  *   Join our TG: https://t.me/WankitCummunity
  *   Visit our website: www.wankit.tv
@@ -704,6 +705,16 @@ contract Wankit is Context, IBEP20, Ownable {
     using SafeMath for uint256;
     using Address for address;
     using Address for address payable;
+    
+    // We use the below to provide a simplified timelock scheme, instead of requiring a separate timelock contract
+    // Separate contracts are complex to interact with and can cause undefined behaviour in the main contract if errors are made
+    // Using the functionality below we still provide on-chain notifications about any major changes with a 12-hour window before they are enacted without the associated complexity and risks
+    enum Functions { FEESETTER, ROUTER, MIN_MAX_FEE_BALANCE, FEE_FORMULA, FEE_PERC, MARKETING, PLATFORM, CHARITY, TIMELOCK }
+    uint8 private constant TIMELOCKED = 0;
+    uint8 private constant LIVE = 1;
+    mapping (Functions => uint256) private _timelock;
+    uint256[2] private _timelockDuration = [0, 12 hours];
+    uint256 public _pendingTimelockedChanges;
 
     mapping(address => uint256) private _rOwned;
     mapping(address => uint256) private _tOwned;
@@ -711,44 +722,43 @@ contract Wankit is Context, IBEP20, Ownable {
     mapping(address => bool) private _isExcludedFromFee;
     mapping(address => bool) private _isExcluded;
     address[] private _excluded;
-    address public _feeSetter;
+    address[2] private _feeSetter;
     
-    string private constant _name = "Wankit";
-    string private constant _symbol = "WNKT";
-    uint8 private constant _decimals = 9;
+    string private constant NAME = "Wankit"; 
+    string private constant SYMBOL = "WNKT"; 
+    uint8 private constant DECIMALS = 9;
    
     uint256 private constant MAX = ~uint256(0);
-    uint256 private constant _tTotal = 1000000000 * 10**_decimals;
-    uint256 private _rTotal = (MAX - (MAX % _tTotal));
-    uint256 private _tFeeTotal;
+    uint256 private constant TOTAL_SUPPLY = 1000000000 * 10**DECIMALS;
+    uint256 private _rTotal = (MAX - (MAX % TOTAL_SUPPLY));
 
-    address public _marketingWallet;
-    address public _platformWallet;
-    address public _charityWallet;
+    address[2] private _marketingWallet;
+    address[2] private _platformWallet;
+    address[2] private _charityWallet;
     
-    uint256 private _feeSecondOrderTerm = 1;
-    uint256 private _feeFirstOrderTerm = 8 * 10**14;
-    uint256 private _feeZerothOrderTerm = 141 * 10**11;
-    uint256 private _feeIntegerScalingFactor = 10**16;
+    uint256[2] private _feeSecondOrderTerm = [0, 1];
+    uint256[2] private _feeFirstOrderTerm = [0, 8 * 10**14];
+    uint256[2] private _feeZerothOrderTerm = [0, 141 * 10**11];
+    uint256[2] private _feeIntegerScalingFactor = [0, 10**16];
     
-    uint256 private _liquidityFeePercentage = 34;
-    uint256 private _reflectionFeePercentage = 33;
-    uint256 private _marketingFeePercentage = 11;
-    uint256 private _charityFeePercentage = 11;
-    uint256 private _platformFeePercentage = 11;
+    uint256[2] private _liquidityFeePercentage = [0, 34];
+    uint256[2] private _reflectionFeePercentage = [0, 33];
+    uint256[2] private _marketingFeePercentage = [0, 11];
+    uint256[2] private _charityFeePercentage = [0, 11];
+    uint256[2] private _platformFeePercentage = [0, 11];
 
-    IPancakeRouter02 public _pancakeswapV2Router;
+    IPancakeRouter02[2] private _pancakeswapV2Router;
     address public _pancakeswapV2Pair;
     
-    bool _lock;
-    bool _inSwapAndLiquify;
-    bool public _swapAndLiquifyEnabled = true;
+    bool private _lock;
+    bool private _inSwapAndLiquify;
+    bool private _swapAndLiquifyEnabled = true;
     
-    bool private _enableFees = false; //stops fees being set by wallet size until set to true - done by calling enableAllFees()
-    uint256 public _minFeeCeilingBalance = 100000 * 10**_decimals; //balance below which all Txes from the wallet address are taxed at the lowest rate
-    uint256 public _maxFeeFloorBalance = 1000000 * 10**_decimals; //balance above which all Txes from the wallet address are taxed at the highest rate
-    uint256 public _maxTxAmount = 1000000000 * 10**_decimals; //initialised to be disabled (set to total supply)
-    uint256 private constant _numTokensSellToAddToLiquidity = 300000 * 10**_decimals; //minimum amount needed in contract before it's transferred to LP
+    bool private _enableFees = true; //enables fees being set by wallet size - disabled by calling disableAllFees()
+    uint256[2] private _minFeeCeilingBalance = [0, 100000 * 10**DECIMALS]; //balance below which all Txes from the wallet address are taxed at the lowest rate
+    uint256[2] private _maxFeeFloorBalance = [0, 1000000 * 10**DECIMALS]; //balance above which all Txes from the wallet address are taxed at the highest rate
+    uint256 public _maxTxAmount = 1000000000 * 10**DECIMALS; //initialised to be disabled (set to total supply). Don't want this timelocked as will need to change quickly at DEX launch (low Tx initially to prevent easy presale dump and botting)
+    uint256 private constant MIN_CONTRACT_BALANCE_TO_ADD_LP = 300000 * 10**DECIMALS; //minimum amount needed in contract before it's transferred to LP
     
     event MinTokensBeforeSwapUpdated (uint256 minTokensBeforeSwap);
     event SwapAndLiquifyEnabledUpdated (bool enabled);
@@ -756,16 +766,18 @@ contract Wankit is Context, IBEP20, Ownable {
     event ExcludedFromReward (address indexed account);
     event IncludedInFee (address indexed account);
     event ExcludedFromFee (address indexed account);
-    event RouterAndLPPairAddressChanged (address indexed newRouterFactory, address indexed newPair);
-    event MinMaxBalancesForFeeFormulaChanged (uint256 oldMinFeeCeilingBalance, uint256 oldMaxFeeFloorBalance, uint256 newMinFeeCeilingBalance, uint256 newMaxFeeFloorBalance);
-    event FeeFormulaUpdated (uint256 secondOrderTerm, uint256 firstOrderTerm, uint256 zerothOrderTerm, uint256 integerScalingFactor);
-    event FeePercentagesUpdated (uint256 reflectionFeePercentage, uint256 liquidityFeePercentage, uint256 marketingFeePercentage, uint256 charityFeePercentage, uint256 platformFeePercentage);
+    event RouterAndLPPairAddressChanged (address indexed newRouterFactory, address indexed newPair, bool changeEnacted, uint256 timestampToEnactChange);
+    event MinMaxBalancesForFeeFormulaChanged (uint256 newMinFeeCeilingBalance, uint256 newMaxFeeFloorBalance, bool changeEnacted, uint256 timestampToEnactChange);
+    event FeeFormulaUpdated (uint256 secondOrderTerm, uint256 firstOrderTerm, uint256 zerothOrderTerm, uint256 integerScalingFactor, bool changeEnacted, uint256 timestampToEnactChange);
+    event FeePercentagesUpdated (uint256 reflectionFeePercentage, uint256 liquidityFeePercentage, uint256 marketingFeePercentage, uint256 charityFeePercentage, uint256 platformFeePercentage, bool changeEnacted, uint256 timestampToEnactChange);
     event MaxTxAmtUpdated (uint256 maxTxAmount);
-    event WalletAddressUpdated (string walletName, address walletAddress);
-    event FeeTransfer (uint256 feeAmount, address indexed recipient);
-    event FeeSetterChanged (address indexed newFeeSetter);
+    event WalletAddressUpdated (string walletName, address walletAddress, bool changeEnacted, uint256 timestampToEnactChange);
+    event FeeTransfer (uint256 feeAmount);
+    event FeeSetterChanged (address indexed newFeeSetter, bool changeEnacted, uint256 timestampToEnactChange);
     event AccidentallySentTokenWithdrawn (address indexed token, address indexed account, uint256 amount);
     event AccidentallySentBNBWithdrawn (address indexed account, uint256 amount);
+    event TimelockChanged (uint256 numHours, bool changeEnacted, uint256 timestampToEnactChange);
+    event TimelockChangesCancelled (Functions functionCancelled);
     
     modifier lockTheSwap {
         _inSwapAndLiquify = true;
@@ -780,15 +792,20 @@ contract Wankit is Context, IBEP20, Ownable {
         _lock = false;
     }
     
+    modifier onlyFeeSetter {
+        require (_msgSender() == _feeSetter[LIVE], "Only accessible by feeSetter");
+        _;
+    }
+    
     constructor (address marketingWallet, address platformWallet, address charityWallet) {
         _rOwned[_msgSender()] = _rTotal;
-        _feeSetter = _msgSender();
+        _feeSetter[LIVE] = _msgSender();
         
-        _marketingWallet = marketingWallet;
-        _platformWallet = platformWallet;
-        _charityWallet = charityWallet;
+        _marketingWallet[LIVE] = marketingWallet;
+        _platformWallet[LIVE] = platformWallet;
+        _charityWallet[LIVE] = charityWallet;
         
-        // 0x10ED43C718714eb63d5aA57B78B54704E256024E is the PCSv2 Router address 
+        // 0x10ED43C718714eb63d5aA57B78B54704E256024E is the PCSv2 Router address
         // 0xD99D1c33F9fC3444f8101754aBC46c52416550D1 is the PCS testnet
         // 0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3 is the address of https://pancake.kiemtienonline360.com/
         IPancakeRouter02 pancakeswapV2Router = IPancakeRouter02 (0x10ED43C718714eb63d5aA57B78B54704E256024E);
@@ -796,49 +813,67 @@ contract Wankit is Context, IBEP20, Ownable {
         _pancakeswapV2Pair = IPancakeFactory(pancakeswapV2Router.factory()).createPair(address(this), pancakeswapV2Router.WETH());
 
         // set the rest of the contract variables
-        _pancakeswapV2Router = pancakeswapV2Router;
+        _pancakeswapV2Router[LIVE] = pancakeswapV2Router;
         
         //exclude this contract and contract wallets from fee
         _isExcludedFromFee[_msgSender()] = true;
         _isExcludedFromFee[address(this)] = true;
-        _isExcludedFromFee[_marketingWallet] = true;
-        _isExcludedFromFee[_platformWallet] = true;
-        _isExcludedFromFee[_charityWallet] = true;
+        _isExcludedFromFee[marketingWallet] = true;
+        _isExcludedFromFee[platformWallet] = true;
+        _isExcludedFromFee[charityWallet] = true;
         _isExcluded[_pancakeswapV2Pair] = true; //should stop skimming being successful
         _excluded.push(_pancakeswapV2Pair);
         
-        emit Transfer (address(0), _msgSender(), _tTotal);
+        emit Transfer (address(0), _msgSender(), TOTAL_SUPPLY);
     }
     
      // To receive BNB from pancakeswapV2Router when swapping
     receive() external payable {}
     
     // Change the feeSetter address - used for modifying elements of the tokenomics and whitelisting addresses when required (e.g. CEX listings)
-    function setNewFeesetter (address feeSetter) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
-        _feeSetter = feeSetter;
-        emit FeeSetterChanged (feeSetter);
+    function setFeeSetter (address feeSetter) external onlyFeeSetter {
+        require (feeSetter != address(0), "Can't set to the zero address");
+        // We don't care if the timelock countdown has already been started - this enables us to correct mistakes without neededing to cancel the change
+        // Save the update, set the time the change will be made, and emit an event to say what change will be made when
+        _timelock[Functions.FEESETTER] = block.timestamp + _timelockDuration[LIVE];
+        _feeSetter[TIMELOCKED] = feeSetter;
+        _pendingTimelockedChanges += 1;
+        emit FeeSetterChanged (feeSetter, false, _timelock[Functions.FEESETTER]);
+    }
+    
+    // Change the timelock duration
+    function setTimelockDuration (uint256 numHours) external onlyFeeSetter {
+        // We don't care if the timelock countdown has already been started - this enables us to correct mistakes without neededing to cancel the change
+        // Save the update, set the time the change will be made, and emit an event to say what change will be made when
+        _timelock[Functions.TIMELOCK] = block.timestamp + _timelockDuration[LIVE];
+        _timelockDuration[TIMELOCKED] = numHours * 1 hours;
+        _pendingTimelockedChanges += 1;
+        emit TimelockChanged (numHours, false, _timelock[Functions.TIMELOCK]);
+    }
+    
+    // Cancel a pending change to a timelocked function
+    function cancelTimelockedFunctionChange (Functions toCancel) external onlyFeeSetter {
+        _timelock[toCancel] = 0;
+        _pendingTimelockedChanges -= 1;
+        emit TimelockChangesCancelled (toCancel);
     }
     
     // Contract initialised with fees disabled to enable presale to take place. This should be called once the presale is finished to enable fee-taking on transfers
-    function enableAllFees() external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function enableAllFees() external onlyFeeSetter {
         _enableFees = true;
         _swapAndLiquifyEnabled = true;
         emit SwapAndLiquifyEnabledUpdated (true);
     }
     
     // Disable fee-taking and stop swapping contract tokens to add to liquidity
-    function disableAllFees() external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function disableAllFees() external onlyFeeSetter {
         _enableFees = false;
         _swapAndLiquifyEnabled = false;
         emit SwapAndLiquifyEnabledUpdated (false);
     }
     
     // Allows us to exclude addresses from getting rewards - probably used with centralised exchanges and farms alongside fee exclusion
-    function excludeFromReward (address account) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function excludeFromReward (address account) external onlyFeeSetter {
         require(account != address(this), "Can't exclude the contract address");
         require(!_isExcluded[account], "Account is already excluded");
         
@@ -852,8 +887,7 @@ contract Wankit is Context, IBEP20, Ownable {
     }
 
     // Allow excluded accounts to be included again (accounts are by default included in the rewards)
-    function includeInReward(address account) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function includeInReward(address account) external onlyFeeSetter {
         require(_isExcluded[account], "Account is already included");
         
         for (uint256 i = 0; i < _excluded.length; i++) {
@@ -870,101 +904,116 @@ contract Wankit is Context, IBEP20, Ownable {
     
     // Allows excluding from fees, which means transfers from and to are not taxed. Will be used for market-making deposits to centralised exchanges.
     // We may also need to do this if WNKT will be used to deposit in farms (ref. Cerberus etc.)
-    function excludeFromFee(address account) external  {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function excludeFromFee(address account) external onlyFeeSetter {
         _isExcludedFromFee[account] = true;
         emit ExcludedFromFee (account);
     }
     
     // Allow excluded accounts to be included again (accounts are by default included in fee-taking)
-    function includeInFee(address account) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function includeInFee(address account) external onlyFeeSetter {
         _isExcludedFromFee[account] = false;
         emit IncludedInFee (account);
     }
     
     // Allows changing of the router address which is used to create the LP pair and add liquidity.
     // This is to prevent the issues seen by renounced contracts when PCS moved from v1 to v2
-    function setRouterAddress (address newRouter) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function setRouterAddress (address newRouter) external onlyFeeSetter {
         require (newRouter != address(0), "Router cannot be set to the zero address");
+        // We don't care if the timelock countdown has already been started - this enables us to correct mistakes without neededing to cancel the change
+        // Save the update, set the time the change will be made, and emit an event to say what change will be made when
+        _timelock[Functions.ROUTER] = block.timestamp + _timelockDuration[LIVE];
         IPancakeRouter02 newPancakeswapV2Router = IPancakeRouter02(newRouter);
-        address newPancakeswapV2Pair = IPancakeFactory(newPancakeswapV2Router.factory()).createPair(address(this), newPancakeswapV2Router.WETH());
-        _pancakeswapV2Pair = newPancakeswapV2Pair;
-        _pancakeswapV2Router = newPancakeswapV2Router;
-        _isExcluded[_pancakeswapV2Pair] = true; //should stop skimming being successful
-        _excluded.push(_pancakeswapV2Pair);
-        emit RouterAndLPPairAddressChanged (_pancakeswapV2Router.factory(), _pancakeswapV2Pair);
+        _pancakeswapV2Router[TIMELOCKED] = newPancakeswapV2Router;
+        _pendingTimelockedChanges += 1;
+        emit RouterAndLPPairAddressChanged (newPancakeswapV2Router.factory(), address(0), false, _timelock[Functions.ROUTER]);
     }
     
     // Allows modifying the minimum and maximum wallet balances where the fee formula starts to take effect.
     // Below the minimum balance fees are set to the minimum balance rate, above the maximum balance fees are capped at the maximum balance rate.
-    function setMinMaxBalancesForFeeFormula (uint256 minFeeCeilingBalance, uint256 maxFeeFloorBalance) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function setMinMaxBalancesForFeeFormula (uint256 minFeeCeilingBalance, uint256 maxFeeFloorBalance) external onlyFeeSetter {
         require (maxFeeFloorBalance > minFeeCeilingBalance, "maxFeeFloorBalance must be greater than minFeeCeilingBalance");
-        emit MinMaxBalancesForFeeFormulaChanged (_minFeeCeilingBalance, _maxFeeFloorBalance, minFeeCeilingBalance, maxFeeFloorBalance);
-        _minFeeCeilingBalance = minFeeCeilingBalance;
-        _maxFeeFloorBalance = maxFeeFloorBalance;
+        // We don't care if the timelock countdown has already been started - this enables us to correct mistakes without neededing to cancel the change
+        // Save the update, set the time the change will be made, and emit an event to say what change will be made when
+        _timelock[Functions.MIN_MAX_FEE_BALANCE] = block.timestamp + _timelockDuration[LIVE];
+        _minFeeCeilingBalance[TIMELOCKED] = minFeeCeilingBalance;
+        _maxFeeFloorBalance[TIMELOCKED] = maxFeeFloorBalance;
+        _pendingTimelockedChanges += 1;
+        emit MinMaxBalancesForFeeFormulaChanged (minFeeCeilingBalance, maxFeeFloorBalance, false,  _timelock[Functions.MIN_MAX_FEE_BALANCE]);
     }
     
     // Allows the fee formula that sets the rates between the minimum and maximum balances to be modified 
-    function setFeeFormula (uint256 feeSecondOrderTerm, uint256 feeFirstOrderTerm, uint256 feeZerothOrderTerm, uint256 feeIntegerScalingFactor) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function setFeeFormula (uint256 feeSecondOrderTerm, uint256 feeFirstOrderTerm, uint256 feeZerothOrderTerm, uint256 feeIntegerScalingFactor) external onlyFeeSetter {
         require (feeIntegerScalingFactor != 0, "feeIntegerScalingFactor cannot be zero");
-        _feeSecondOrderTerm = feeSecondOrderTerm;
-        _feeFirstOrderTerm = feeFirstOrderTerm;
-        _feeZerothOrderTerm = feeZerothOrderTerm;
-        _feeIntegerScalingFactor = feeIntegerScalingFactor;
-        emit FeeFormulaUpdated (_feeSecondOrderTerm, _feeFirstOrderTerm, _feeZerothOrderTerm, _feeIntegerScalingFactor);
+        _timelock[Functions.FEE_FORMULA] = block.timestamp + _timelockDuration[LIVE];
+        _feeSecondOrderTerm[TIMELOCKED] = feeSecondOrderTerm;
+        _feeFirstOrderTerm[TIMELOCKED] = feeFirstOrderTerm;
+        _feeZerothOrderTerm[TIMELOCKED] = feeZerothOrderTerm;
+        _feeIntegerScalingFactor[TIMELOCKED] = feeIntegerScalingFactor;
+        _pendingTimelockedChanges += 1;
+        emit FeeFormulaUpdated (feeSecondOrderTerm, feeFirstOrderTerm, feeZerothOrderTerm, feeIntegerScalingFactor, false, _timelock[Functions.FEE_FORMULA]);
     }
     
     // Sets the percentages of the total transaction fee to go to each area
-    function setFeePercentages (uint256 reflectionFeePercentage, uint256 liquidityFeePercentage, uint256 marketingFeePercentage, uint256 charityFeePercentage, uint256 platformFeePercentage) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function setFeePercentages (uint256 reflectionFeePercentage, uint256 liquidityFeePercentage, uint256 marketingFeePercentage, uint256 charityFeePercentage, uint256 platformFeePercentage) external onlyFeeSetter {
         require (reflectionFeePercentage.add(liquidityFeePercentage).add(marketingFeePercentage).add(charityFeePercentage).add(platformFeePercentage) == 100, "Fee percentages must add up to 100");
-        _reflectionFeePercentage = reflectionFeePercentage;
-        _liquidityFeePercentage = liquidityFeePercentage;
-        _marketingFeePercentage = marketingFeePercentage;
-        _charityFeePercentage = charityFeePercentage;
-        _platformFeePercentage = platformFeePercentage;
-        emit FeePercentagesUpdated (_reflectionFeePercentage, _liquidityFeePercentage, _marketingFeePercentage, _charityFeePercentage, _platformFeePercentage);
+        // We don't care if the timelock countdown has already been started - this enables us to correct mistakes without neededing to cancel the change
+        // Save the update, set the time the change will be made, and emit an event to say what change will be made when
+        _timelock[Functions.FEE_PERC] = block.timestamp + _timelockDuration[LIVE];
+        _reflectionFeePercentage[TIMELOCKED] = reflectionFeePercentage;
+        _liquidityFeePercentage[TIMELOCKED] = liquidityFeePercentage;
+        _marketingFeePercentage[TIMELOCKED] = marketingFeePercentage;
+        _charityFeePercentage[TIMELOCKED] = charityFeePercentage;
+        _platformFeePercentage[TIMELOCKED] = platformFeePercentage;
+        _pendingTimelockedChanges += 1;
+        emit FeePercentagesUpdated (reflectionFeePercentage, liquidityFeePercentage, marketingFeePercentage, charityFeePercentage, platformFeePercentage, false, _timelock[Functions.FEE_PERC]);
     }
     
-    // Sets the maximum transfer possible as a percentage of total supply. Set to 100% by default
-    function setMaxTxPercent (uint256 maxTxPercent) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
-        _maxTxAmount = _tTotal.mul(maxTxPercent).div(100);
+    // Sets the maximum transfer possible as a permilleage (per 1000) of total supply. Set to 100% by default
+    // Allows a minimum Tx percentage of 0.1% (1,000,000 WNKT)
+    function setMaxTxPermille (uint256 maxTxPermille) external onlyFeeSetter {
+        require (maxTxPermille > 0, "Can't set to 0");
+        require (maxTxPermille <= 1000, "Can't set to > 100%");
+        _maxTxAmount = TOTAL_SUPPLY.mul(maxTxPermille).div(1000);
         emit MaxTxAmtUpdated (_maxTxAmount);
     }
 
     // Allows the marketing wallet address to be changed
-    function setMarketingWallet (address newWallet) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
-        _marketingWallet = newWallet;
-        _isExcludedFromFee[_marketingWallet] = true;
-        emit WalletAddressUpdated ("Marketing", newWallet);
+    function setMarketingWallet (address newWallet) external onlyFeeSetter {
+        require (newWallet != address(0), "Can't set to zero address");
+        // We don't care if the timelock countdown has already been started - this enables us to correct mistakes without neededing to cancel the change
+        // Save the update, set the time the change will be made, and emit an event to say what change will be made when
+        _timelock[Functions.MARKETING] = block.timestamp + _timelockDuration[LIVE];
+        _marketingWallet[TIMELOCKED] = newWallet;
+        _pendingTimelockedChanges += 1;
+        emit WalletAddressUpdated ("Marketing", newWallet, false, _timelock[Functions.MARKETING]);
     }
 
     // Allows the platform development wallet address to be changed
-    function setPlatformWallet (address newWallet) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
-        _platformWallet = newWallet;
-        _isExcludedFromFee[_platformWallet] = true;
-        emit WalletAddressUpdated ("Platform", newWallet);
+    function setPlatformWallet (address newWallet) external onlyFeeSetter {
+        require (newWallet != address(0), "Can't set to zero address");
+        // We don't care if the timelock countdown has already been started - this enables us to correct mistakes without neededing to cancel the change
+        // Save the update, set the time the change will be made, and emit an event to say what change will be made when
+        _timelock[Functions.PLATFORM] = block.timestamp + _timelockDuration[LIVE];
+        _platformWallet[TIMELOCKED] = newWallet;
+        _pendingTimelockedChanges += 1;
+        emit WalletAddressUpdated ("Platform", newWallet, false, _timelock[Functions.PLATFORM]);
     }
 
+
     // Allows the charity wallet address to be changed
-    function setCharityWallet (address newWallet) external {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
-        _charityWallet = newWallet;
-        _isExcludedFromFee[_charityWallet] = true;
-        emit WalletAddressUpdated ("Charity", newWallet);
+    function setCharityWallet (address newWallet) external onlyFeeSetter {
+        require (newWallet != address(0), "Can't set to zero address");
+        // We don't care if the timelock countdown has already been started - this enables us to correct mistakes without neededing to cancel the change
+        // Save the update, set the time the change will be made, and emit an event to say what change will be made when
+        _timelock[Functions.CHARITY] = block.timestamp + _timelockDuration[LIVE];
+        _charityWallet[TIMELOCKED] = newWallet;
+        _pendingTimelockedChanges += 1;
+        emit WalletAddressUpdated ("Charity", newWallet, false, _timelock[Functions.CHARITY]);
     }
     
     // Help users who accidentally send tokens to the contract address
     // Does not affect the proper running of the contract - WNKT is specifically prevented from being withdrawn in this way
-    function withdrawOtherTokens (address _token, address _account) external nonReentrant {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function withdrawOtherTokens (address _token, address _account) external nonReentrant onlyFeeSetter {
         require (_token != address(this), "Can't withdraw WNKT from contract");
         IBEP20 token = IBEP20(_token);
         uint tokenBalance = token.balanceOf (address(this));
@@ -974,8 +1023,7 @@ contract Wankit is Context, IBEP20, Ownable {
     
     // Help users who accidentally send BNB to the contract address - this only removes BNB that has been manually transferred to the contract address
     // BNB that is created as part of the liquidity provision process will be sent to the PCS pair address and so will not be affected by this action
-    function withdrawExcessBNB (address _account) external nonReentrant {
-        require (_msgSender() == _feeSetter, "Only accessible by feeSetter");
+    function withdrawExcessBNB (address _account) external nonReentrant onlyFeeSetter {
         uint256 contractBNBBalance = address(this).balance;
         
         if (contractBNBBalance > 0)
@@ -1013,6 +1061,42 @@ contract Wankit is Context, IBEP20, Ownable {
     function isExcludedFromFee (address account) public view returns (bool) {
         return _isExcludedFromFee[account];
     }
+    
+    function getMarketingWallet() public view returns (address) {
+        return _marketingWallet[LIVE];
+    }
+    
+    function getPlatformWallet() public view returns (address) {
+        return _platformWallet[LIVE];
+    }
+    
+    function getCharityWallet() public view returns (address) {
+        return _charityWallet[LIVE];
+    }
+    
+    function getFeeSetter() public view returns (address) {
+        return _feeSetter[LIVE];
+    }
+    
+    function getTimelockDuration() public view returns (uint256) {
+        return _timelockDuration[LIVE];
+    }
+    
+    function getMinMaxBalancesForFeeFormula() public view returns (uint256, uint256) {
+        return (_minFeeCeilingBalance[LIVE], _maxFeeFloorBalance[LIVE]);
+    }
+    
+    function getFeeFormula() public view returns (uint256, uint256, uint256, uint256) {
+        return (_feeSecondOrderTerm[LIVE], _feeFirstOrderTerm[LIVE], _feeZerothOrderTerm[LIVE], _feeIntegerScalingFactor[LIVE]);
+    }
+    
+    function getFeePercentages() public view returns (uint256, uint256, uint256, uint256, uint256) {
+        return (_reflectionFeePercentage[LIVE], _liquidityFeePercentage[LIVE], _marketingFeePercentage[LIVE], _charityFeePercentage[LIVE], _platformFeePercentage[LIVE]);
+    }
+    
+    function getRouterAddress() public view returns (address) {
+        return (_pancakeswapV2Router[LIVE].factory());
+    }
 
     // Returns balance with reflections unless the address is excluded from reflection rewards
     function balanceOf (address account) public view override returns (uint256) {
@@ -1030,57 +1114,62 @@ contract Wankit is Context, IBEP20, Ownable {
         return _isExcluded[account];
     }
 
-    function totalFees() public view returns (uint256) {
-        return _tFeeTotal;
-    }
-
     function name() public pure returns (string memory) {
-        return _name;
+        return NAME;
     }
 
     function symbol() public pure returns (string memory) {
-        return _symbol;
+        return SYMBOL;
     }
 
     function decimals() public pure returns (uint8) {
-        return _decimals;
+        return DECIMALS;
     }
 
     function totalSupply() public pure override returns (uint256) {
-        return _tTotal;
+        return TOTAL_SUPPLY;
     }
-
-    // Modifies global variables that control the reflection earned by all wallets
-    function _reflectFee (uint256 rFee, uint256 tFee) private {
-        _rTotal = _rTotal.sub(rFee);
-        _tFeeTotal = _tFeeTotal.add(tFee);
+    
+    // Check whether any timelocked changes are waiting to take effect
+    // Anyone can call this as it will only make changes if there's an approved change by feeSetter that has passed the timelock time
+    function enactAvailableTimelockChanges() public {
+        _setFeeSetter();
+        _setTimelockDuration();
+        _setRouterAddress();
+        _setMinMaxBalancesForFeeFormula();
+        _setFeeFormula();
+        _setFeePercentages();
+        _setMarketingWallet();
+        _setPlatformWallet();
+        _setCharityWallet();
     }
 
     // Calculate both the excluded and reflective amounts to transfer between wallets
-    function _getValues (uint256 senderBalance, uint256 tAmount) private returns (uint256, uint256, uint256, uint256, uint256) {
+    function _getValues (uint256 senderBalance, uint256 tAmount) private returns (uint256, uint256, uint256, uint256) {
         if (!_enableFees) {
             (uint256 rAmount, uint256 rTransferAmount, uint256 rReflectionFee) = _getRValues (tAmount, 0, 0, _getRate());
-            return (rAmount, rTransferAmount, rReflectionFee, tAmount, 0);
+            return (rAmount, rTransferAmount, rReflectionFee, tAmount);
         } else {
-            if (senderBalance < _minFeeCeilingBalance) {
-                senderBalance = _minFeeCeilingBalance;
-            } else if (senderBalance > _maxFeeFloorBalance) {
-                senderBalance = _maxFeeFloorBalance;
+            if (senderBalance < _minFeeCeilingBalance[LIVE]) {
+                senderBalance = _minFeeCeilingBalance[LIVE];
+            } else if (senderBalance > _maxFeeFloorBalance[LIVE]) {
+                senderBalance = _maxFeeFloorBalance[LIVE];
             }
             
-            uint256 unscaledFeeLimit = _feeSecondOrderTerm.mul(senderBalance).mul(senderBalance) + _feeFirstOrderTerm.mul(senderBalance) + _feeZerothOrderTerm;
-            uint256 scaledTxTotalFee = unscaledFeeLimit.mul(tAmount).div(senderBalance).div(_feeIntegerScalingFactor);
+            uint256 unscaledFeeLimit = _feeSecondOrderTerm[LIVE].mul(senderBalance).mul(senderBalance).add(_feeFirstOrderTerm[LIVE].mul(senderBalance)).add(_feeZerothOrderTerm[LIVE]);
+            uint256 scaledTxTotalFee = unscaledFeeLimit.mul(tAmount).div(senderBalance).div(_feeIntegerScalingFactor[LIVE]);
             uint256 tTransferAmount = tAmount.sub(scaledTxTotalFee);
-            uint256 tReflectionFee = scaledTxTotalFee.mul(_reflectionFeePercentage).div(100);
+            uint256 tReflectionFee = scaledTxTotalFee.mul(_reflectionFeePercentage[LIVE]).div(100);
             uint256 tOtherFees = scaledTxTotalFee.sub(tReflectionFee);
-            _takeTokenFee (tOtherFees, address(this));
+            _takeTokenFee (tOtherFees);
             (uint256 rAmount, uint256 rTransferAmount, uint256 rReflectionFee) = _getRValues (tAmount, tReflectionFee, tOtherFees, _getRate());
-            return (rAmount, rTransferAmount, rReflectionFee, tTransferAmount, tReflectionFee);
+            return (rAmount, rTransferAmount, rReflectionFee, tTransferAmount);
         }
     }
 
     // Transfer fee amounts to wallets
-    function _takeTokenFee (uint256 tFee, address recipient) private {
+    function _takeTokenFee (uint256 tFee) private {
+        address recipient = address(this);
         uint256 currentRate =  _getRate();
         uint256 rFee = tFee.mul(currentRate);
         _rOwned[recipient] = _rOwned[recipient].add(rFee);
@@ -1088,7 +1177,7 @@ contract Wankit is Context, IBEP20, Ownable {
         if(_isExcluded[recipient])
             _tOwned[recipient] = _tOwned[recipient].add(tFee);
             
-        emit FeeTransfer (tFee, recipient);
+        emit FeeTransfer (tFee);
     }
     
     function _approve (address owner, address spender, uint256 amount) private {
@@ -1115,7 +1204,7 @@ contract Wankit is Context, IBEP20, Ownable {
         
         // Check the token balance of this contract is over the min number we need to initiate a swap + liquidity lock
         // Check we're not already adding liquidity and don't take fees if sender is the PCS pair (i.e. someone is buying WNKT).
-        if (contractTokenBalance >= _numTokensSellToAddToLiquidity && !_inSwapAndLiquify && from != _pancakeswapV2Pair && _swapAndLiquifyEnabled)
+        if (contractTokenBalance >= MIN_CONTRACT_BALANCE_TO_ADD_LP && !_inSwapAndLiquify && from != _pancakeswapV2Pair && _swapAndLiquifyEnabled)
             _takeBNBFees (contractTokenBalance);
         
         bool takeFee = true;
@@ -1129,8 +1218,8 @@ contract Wankit is Context, IBEP20, Ownable {
 
     // Swap half the tokens for BNB, add tokens + BNB to the LP and take fee amounts to fee wallets
     function _takeBNBFees (uint256 contractTokenBalance) private lockTheSwap {
-        uint256 feeDivisor = _liquidityFeePercentage.add(_marketingFeePercentage).add(_platformFeePercentage).add(_charityFeePercentage);
-        uint256 liquidityBalance = contractTokenBalance.mul(_liquidityFeePercentage).div(feeDivisor);
+        uint256 feeDivisor = _liquidityFeePercentage[LIVE].add(_marketingFeePercentage[LIVE]).add(_platformFeePercentage[LIVE]).add(_charityFeePercentage[LIVE]);
+        uint256 liquidityBalance = contractTokenBalance.mul(_liquidityFeePercentage[LIVE]).div(feeDivisor);
         uint256 otherBalance = contractTokenBalance.sub(liquidityBalance);
         
         // Split the liquidity balance into halves
@@ -1144,13 +1233,13 @@ contract Wankit is Context, IBEP20, Ownable {
         uint256 bnbRemainder = _addLiquidity (otherHalf, bnbReceived);
         
         // Calculate the amount to distribute to each wallet and transfer it
-        feeDivisor = feeDivisor.sub(_liquidityFeePercentage);
-        uint256 marketingBalance = bnbRemainder.mul(_marketingFeePercentage).div(feeDivisor);
-        uint256 charityBalance = bnbRemainder.mul(_charityFeePercentage).div(feeDivisor);
+        feeDivisor = feeDivisor.sub(_liquidityFeePercentage[LIVE]);
+        uint256 marketingBalance = bnbRemainder.mul(_marketingFeePercentage[LIVE]).div(feeDivisor);
+        uint256 charityBalance = bnbRemainder.mul(_charityFeePercentage[LIVE]).div(feeDivisor);
         uint256 platformBalance = bnbRemainder.sub(marketingBalance).sub(charityBalance);
-        payable(_marketingWallet).sendValue(marketingBalance);
-        payable(_charityWallet).sendValue(charityBalance);
-        payable(_platformWallet).sendValue(platformBalance);
+        payable(_marketingWallet[LIVE]).sendValue(marketingBalance);
+        payable(_charityWallet[LIVE]).sendValue(charityBalance);
+        payable(_platformWallet[LIVE]).sendValue(platformBalance);
     }
 
     // Swap to BNB and return how much BNB we swapped for
@@ -1161,12 +1250,12 @@ contract Wankit is Context, IBEP20, Ownable {
         // Generate the pancakeswap pair path of WNKT -> WBNB
         address[] memory path = new address[](2);
         path[0] = address(this);
-        path[1] = _pancakeswapV2Router.WETH();
+        path[1] = _pancakeswapV2Router[LIVE].WETH();
 
-        _approve (address(this), address(_pancakeswapV2Router), tokenAmount);
+        _approve (address(this), address(_pancakeswapV2Router[LIVE]), tokenAmount);
 
         // Make the swap
-        _pancakeswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        _pancakeswapV2Router[LIVE].swapExactTokensForETHSupportingFeeOnTransferTokens(
             tokenAmount,
             0, // Accept any amount of BNB
             path,
@@ -1181,15 +1270,15 @@ contract Wankit is Context, IBEP20, Ownable {
     // Add token and BNB to LP, returning the amount of any unused BNB
     function _addLiquidity (uint256 tokenAmount, uint256 bnbAmount) private returns (uint256) {
         // Approve token transfer to cover all possible scenarios
-        _approve (address(this), address(_pancakeswapV2Router), tokenAmount);
+        _approve (address(this), address(_pancakeswapV2Router[LIVE]), tokenAmount);
 
         // Add the liquidity
-        (, uint256 amountBNBFromLiquidityTx, ) = _pancakeswapV2Router.addLiquidityETH {value: bnbAmount} (
+        (, uint256 amountBNBFromLiquidityTx, ) = _pancakeswapV2Router[LIVE].addLiquidityETH {value: bnbAmount} (
             address(this),
             tokenAmount,
             0, // slippage is unavoidable
             0, // slippage is unavoidable
-            owner(),
+            _feeSetter[LIVE],
             block.timestamp
         );
         
@@ -1210,7 +1299,7 @@ contract Wankit is Context, IBEP20, Ownable {
         else
             balanceForFees = balanceOf (sender);
             
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues (balanceForFees, tAmount);
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount) = _getValues (balanceForFees, tAmount);
         
         if (_isExcluded[sender])
             _tOwned[sender] = _tOwned[sender].sub(tAmount);
@@ -1220,11 +1309,141 @@ contract Wankit is Context, IBEP20, Ownable {
             
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
-        _reflectFee (rFee, tFee);
+        _reflectFee (rFee);
         emit Transfer (sender, recipient, tTransferAmount);
         
         if (!takeFee)
             _enableFees = tempFeeEnabled;
+         
+        // If there are pending changes under timelock then we want to make sure these are processed
+        // This avoids the need to submit multiple transactions to confirm a change
+        if (_pendingTimelockedChanges > 0)    
+            enactAvailableTimelockChanges();
+    }
+
+    // Modifies global variables that control the reflection earned by all wallets
+    function _reflectFee (uint256 rFee) private {
+        _rTotal = _rTotal.sub(rFee);
+    }
+    
+    // Set a new charity wallet once timelock has expired
+    function _setCharityWallet() private {
+        if (_timelock[Functions.CHARITY] != 0 && block.timestamp > _timelock[Functions.CHARITY]) {
+            _timelock[Functions.CHARITY] = 0;
+            address newWallet = _platformWallet[TIMELOCKED];
+            _isExcludedFromFee[newWallet] = true;
+            _pendingTimelockedChanges -= 1;
+            emit WalletAddressUpdated ("Charity", newWallet, true, 0);
+        }
+    }
+    
+    // Set a new platform wallet once timelock has expired
+    function _setPlatformWallet() private {
+        if (_timelock[Functions.PLATFORM] != 0 && block.timestamp > _timelock[Functions.PLATFORM]) {
+            _timelock[Functions.PLATFORM] = 0;
+            address newWallet = _platformWallet[TIMELOCKED];
+            _isExcludedFromFee[newWallet] = true;
+            _pendingTimelockedChanges -= 1;
+            emit WalletAddressUpdated ("Platform", newWallet, true, 0);
+        }
+    }
+    
+    // Set a new marketing wallet once timelock has expired
+    function _setMarketingWallet() private {
+        if (_timelock[Functions.MARKETING] != 0 && block.timestamp > _timelock[Functions.MARKETING]) {
+            _timelock[Functions.MARKETING] = 0;
+            address newWallet = _marketingWallet[TIMELOCKED];
+            _isExcludedFromFee[newWallet] = true;
+            _pendingTimelockedChanges -= 1;
+            emit WalletAddressUpdated ("Marketing", newWallet, true, 0);
+        }
+    }
+    
+    // Change fee percentages once timelock has expired
+    function _setFeePercentages() private {
+        if (_timelock[Functions.FEE_PERC] != 0 && block.timestamp > _timelock[Functions.FEE_PERC]) {
+            _timelock[Functions.FEE_PERC] = 0;
+            uint256 reflectionFeePercentage = _reflectionFeePercentage[TIMELOCKED];
+            uint256 liquidityFeePercentage = _liquidityFeePercentage[TIMELOCKED];
+            uint256 marketingFeePercentage = _marketingFeePercentage[TIMELOCKED];
+            uint256 charityFeePercentage = _charityFeePercentage[TIMELOCKED];
+            uint256 platformFeePercentage = _platformFeePercentage[TIMELOCKED];
+            _reflectionFeePercentage[LIVE] = reflectionFeePercentage;
+            _liquidityFeePercentage[LIVE] = liquidityFeePercentage;
+            _marketingFeePercentage[LIVE] = marketingFeePercentage;
+            _charityFeePercentage[LIVE] = charityFeePercentage;
+            _platformFeePercentage[LIVE] = platformFeePercentage;
+            _pendingTimelockedChanges -= 1;
+            emit FeePercentagesUpdated (reflectionFeePercentage, liquidityFeePercentage, marketingFeePercentage, charityFeePercentage, platformFeePercentage, true, 0);
+        }
+    }
+    
+    // Set a new fee formula once the timelock has expired
+    function _setFeeFormula() private {
+        if (_timelock[Functions.FEE_FORMULA] != 0 && block.timestamp > _timelock[Functions.FEE_FORMULA]) {
+            _timelock[Functions.FEE_FORMULA] = 0;
+            uint256 feeSecondOrderTerm = _feeSecondOrderTerm[TIMELOCKED];
+            uint256 feeFirstOrderTerm = _feeFirstOrderTerm[TIMELOCKED];
+            uint256 feeZerothOrderTerm = _feeZerothOrderTerm[TIMELOCKED];
+            uint256 feeIntegerScalingFactor = _feeIntegerScalingFactor[TIMELOCKED];
+            _feeSecondOrderTerm[LIVE] = feeSecondOrderTerm;
+            _feeFirstOrderTerm[LIVE] = feeFirstOrderTerm;
+            _feeZerothOrderTerm[LIVE] = feeZerothOrderTerm;
+            _feeIntegerScalingFactor[LIVE] = feeIntegerScalingFactor;
+            _timelock[Functions.FEE_FORMULA] = 0;
+            _pendingTimelockedChanges -= 1;
+            emit FeeFormulaUpdated (feeSecondOrderTerm, feeFirstOrderTerm, feeZerothOrderTerm, feeIntegerScalingFactor, true, 0);
+        } 
+    }
+    
+    // Change min/max fee limits once timelock has expired 
+    function _setMinMaxBalancesForFeeFormula() private {
+        if (_timelock[Functions.MIN_MAX_FEE_BALANCE] != 0 && block.timestamp > _timelock[Functions.MIN_MAX_FEE_BALANCE]) {
+            _timelock[Functions.MIN_MAX_FEE_BALANCE] = 0;
+            uint256 minFeeCeilingBalance = _minFeeCeilingBalance[TIMELOCKED];
+            uint256 maxFeeFloorBalance = _maxFeeFloorBalance[TIMELOCKED];
+            _minFeeCeilingBalance[LIVE] = minFeeCeilingBalance;
+            _maxFeeFloorBalance[LIVE] = maxFeeFloorBalance;
+            _pendingTimelockedChanges -= 1;
+            emit MinMaxBalancesForFeeFormulaChanged (minFeeCeilingBalance, maxFeeFloorBalance, true,  0);
+        }
+     }
+    
+    //Set a new router and pair address once the timelock has expired
+    function _setRouterAddress () private {
+        if (_timelock[Functions.ROUTER] != 0 && block.timestamp > _timelock[Functions.ROUTER]) {
+            _timelock[Functions.ROUTER] = 0;
+            IPancakeRouter02 newPancakeswapV2Router = _pancakeswapV2Router[TIMELOCKED];
+            address newPancakeswapV2Pair = IPancakeFactory(newPancakeswapV2Router.factory()).createPair(address(this), newPancakeswapV2Router.WETH());
+            _pancakeswapV2Router[LIVE] = newPancakeswapV2Router;
+            _pancakeswapV2Pair = newPancakeswapV2Pair;
+            _isExcluded[newPancakeswapV2Pair] = true; //should stop skimming being successful
+            _excluded.push(newPancakeswapV2Pair);
+            _pendingTimelockedChanges -= 1;
+            emit RouterAndLPPairAddressChanged (newPancakeswapV2Router.factory(), newPancakeswapV2Pair, true, 0);
+        }
+    }
+    
+    // Change the timelock duration once timelock has expired
+    function _setTimelockDuration() private {
+        if (_timelock[Functions.TIMELOCK] != 0 && block.timestamp > _timelock[Functions.TIMELOCK]) {
+            _timelock[Functions.TIMELOCK] = 0;
+            uint256 numHours = _timelockDuration[TIMELOCKED];
+            _timelockDuration[LIVE] = numHours;
+            _pendingTimelockedChanges -= 1;
+            emit TimelockChanged (numHours, true, 0);
+        }
+    }
+    
+    // Change the feeSetter address once timelock has expired
+    function _setFeeSetter() private {
+        if (_timelock[Functions.FEESETTER] != 0 && block.timestamp > _timelock[Functions.FEESETTER]) {
+            _timelock[Functions.FEESETTER] = 0;
+            address feeSetter = _feeSetter[TIMELOCKED];
+            _feeSetter[LIVE] = feeSetter;
+            _pendingTimelockedChanges -= 1;
+            emit FeeSetterChanged (feeSetter, true, 0);
+        }
     }
     
     // Return the number of "normal" tokens an account has based on their reflective balance
@@ -1243,18 +1462,18 @@ contract Wankit is Context, IBEP20, Ownable {
     // Get current token totals from wallets included in reflection
     function _getCurrentSupply() private view returns (uint256, uint256) {
         uint256 rSupply = _rTotal;
-        uint256 tSupply = _tTotal;      
+        uint256 tSupply = TOTAL_SUPPLY;      
         
         for (uint256 i = 0; i < _excluded.length; i++) {
             if (_rOwned[_excluded[i]] > rSupply || _tOwned[_excluded[i]] > tSupply) 
-                return (_rTotal, _tTotal);
+                return (_rTotal, TOTAL_SUPPLY);
             
             rSupply = rSupply.sub(_rOwned[_excluded[i]]);
             tSupply = tSupply.sub(_tOwned[_excluded[i]]);
         }
         
-        if (rSupply < _rTotal.div(_tTotal)) 
-            return (_rTotal, _tTotal);
+        if (rSupply < _rTotal.div(TOTAL_SUPPLY)) 
+            return (_rTotal, TOTAL_SUPPLY);
             
         return (rSupply, tSupply);
     }
